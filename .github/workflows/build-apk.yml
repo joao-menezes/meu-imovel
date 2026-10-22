@@ -32,6 +32,17 @@ jobs:
           sed -i 's#android:label="meu_imovel"#android:label="Meu Imóvel"#' android/app/src/main/AndroidManifest.xml
           # Remove o teste de exemplo gerado (referencia MyApp)
           rm -f test/widget_test.dart
+          # R8 quebra o shared_preferences (NoSuchMethodError getAll): desliga o shrink
+          G=android/app/build.gradle.kts
+          sed -i 's#signingConfig = signingConfigs.getByName("debug")#signingConfig = signingConfigs.getByName("debug")\n            isMinifyEnabled = false\n            isShrinkResources = false#' $G
+          if grep -q "isMinifyEnabled = false" $G; then echo "::notice::minify desligado"; else echo "::warning::não achei o bloco release em $G"; fi
+          # Regras de segurança caso o shrink continue ativo
+          cat > android/app/proguard-rules.pro <<'RULES'
+          -keep class io.flutter.plugins.** { *; }
+          -keep class io.flutter.plugin.** { *; }
+          -keep class kotlin.coroutines.** { *; }
+          -keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
+          RULES
 
       - name: Dependências
         run: flutter pub get
