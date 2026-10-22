@@ -1,0 +1,53 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Gerar pasta android
+        run: |
+          flutter create . --project-name meu_imovel --org com.joaomenezes --platforms android
+          # Release precisa da permissão de internet explícita
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#android:label="meu_imovel"#android:label="Meu Imóvel"#' android/app/src/main/AndroidManifest.xml
+
+      - name: Dependências
+        run: flutter pub get
+
+      - name: Análise
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build APK
+        run: flutter build apk --release --dart-define-from-file=supabase.public.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meu-imovel-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Meu Imóvel (build ${{ github.run_number }})
+          files: build/app/outputs/flutter-apk/app-release.apk
