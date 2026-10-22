@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -30,15 +30,28 @@ jobs:
           # Release precisa da permissão de internet explícita
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
           sed -i 's#android:label="meu_imovel"#android:label="Meu Imóvel"#' android/app/src/main/AndroidManifest.xml
+          # Remove o teste de exemplo gerado (referencia MyApp)
+          rm -f test/widget_test.dart
 
       - name: Dependências
         run: flutter pub get
 
       - name: Análise
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.txt 2>&1
+          code=$?
+          cat analyze.txt
+          grep -E "^\s*(error|warning) " analyze.txt | head -20 | while read -r l; do echo "::warning title=analyze::$l"; done
+          exit $code
 
       - name: Build APK
-        run: flutter build apk --release --dart-define-from-file=supabase.public.json
+        run: |
+          set -o pipefail
+          flutter build apk --release --dart-define-from-file=supabase.public.json 2>&1 | tee build.txt || {
+            grep -E "Error|error:|FAILURE|What went wrong" -A2 build.txt | head -30 | while read -r l; do echo "::error title=build::$l"; done
+            exit 1
+          }
 
       - uses: actions/upload-artifact@v4
         with:
